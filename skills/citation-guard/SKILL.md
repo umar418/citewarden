@@ -37,16 +37,37 @@ Trigger whenever the user:
    get one free at https://www.courtlistener.com/profile/api/ (CourtListener/Free Law
    Project is a nonprofit; this is a free account, not a paid API) and either export it
    in their shell or pass it as `COURTLISTENER_API_TOKEN=... python3 scripts/verify_citations.py`.
-4. The script prints JSON: a list of citations found, each marked `matched` (with the
-   real case name/court/date CourtListener returned) or `unmatched`.
+4. The script prints one JSON object, already bucketed for you:
+   - `full_case_citations` — case citations with a volume+page, the only kind actually
+     sent for verification.
+   - `unverifiable_format_count` — full citations missing a volume or page number
+     (e.g. `22 U.S. ___`); these were never evaluated, not "unmatched."
+   - `short_form_or_id_citations` — `Id.`, `supra`, and short-form cites. These are
+     NOT independently verified — they point back to an earlier full citation. Tell
+     the user which full citation they most likely belong to, don't claim they were checked.
+   - `other_non_case_citations` — statutes and anything else that isn't case law.
+     CourtListener's citation-lookup does not cover these at all; never report them
+     as checked.
+   - `courtlistener_result` — the raw API response for the full case citations.
+   - `name_cross_check` — see below. Check its `performed` field before trusting it.
+   - `disclaimers` — three fixed strings. Always relay all three, verbatim in substance, every time you report results.
 
 ## How to present the results
 
-- Show a short table: citation text → status → (if matched) the real case name/court/year CourtListener confirmed.
-- For anything `unmatched`, say it **could not be verified — confirm manually** before
-  relying on it. Do NOT say "this is fake" outright: a citation can fail to match for
-  benign reasons — it's missing a volume/page number (the API won't even attempt those),
-  it's a very recent case not yet indexed, or it's in a format eyecite didn't parse
-  cleanly. Name the likely reason if you can tell from the citation's shape.
-- Always close with: this is not legal advice, and a clean result does not replace a
-  human's own professional review of the document.
+- Show a short table of the `full_case_citations` only: citation → status → (if
+  matched) the real case name/court/year CourtListener confirmed.
+- For anything unmatched, say it **could not be verified — confirm manually**. Do NOT
+  say "this is fake" outright — see the disclaimers.
+- **Read `name_cross_check` carefully.** If `performed: true` and `possible_mismatches`
+  is non-empty, that is the single most important thing to surface, above everything
+  else, in bold, first: it means a citation number is real but the party names cited
+  don't match the real case — a strong signal of a hallucination that reused a real
+  reporter/volume/page. If `performed: false`, say plainly that the name cross-check
+  could not run on this response and party names need manual confirmation.
+- Report `unverifiable_format_count` and the `short_form_or_id_citations` list
+  separately from the matched/unmatched table — they were not evaluated, full stop.
+- Mention `other_non_case_citations` only to say they exist and weren't covered by this tool (e.g., statutes).
+- Always relay all three `disclaimers` from the script output, in substance:
+  1. a match confirms the case exists, not that it's still good law (not overruled/vacated — this tool does not Shepardize/KeyCite);
+  2. a real case can still be cited for a holding or quote it doesn't contain — this tool cannot check that;
+  3. "unmatched" can mean fabricated OR just not indexed (state trial courts, very recent, unpublished/Westlaw-only decisions) — always say "could not verify," never "fake."

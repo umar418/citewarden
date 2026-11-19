@@ -63,6 +63,15 @@ unmatched, flagged for manual review.
 5. In Claude Code, paste a brief or memo and ask: *"can you check if these
    citations are real?"*
 
+## Limitations (read before relying on this)
+
+This tool confirms a citation **exists**. It does not confirm:
+- that the case is still **good law** (not overruled, reversed, or vacated) - it is not a Shepard's/KeyCite replacement;
+- that the case actually **says** what it's being cited for - a real citation can still be attached to a fabricated quote or holding;
+- anything about state trial-court orders, administrative decisions, or unpublished/Westlaw-only citations not indexed in CourtListener's free database - those can come back "unmatched" for coverage reasons, not because they're fake.
+
+See [`skills/citation-guard/FINDINGS.md`](skills/citation-guard/FINDINGS.md) for the full adversarial test report these limitations came from, including the most important one found: a hallucination that reuses a **real** citation number with **invented party names** passes a naive "does this citation exist" check, which is why this tool separately cross-checks the cited party names against the real case name.
+
 ## Credits
 
 Built on two free, open projects from [Free Law Project](https://free.law/):
