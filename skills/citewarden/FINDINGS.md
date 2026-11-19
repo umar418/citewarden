@@ -1,4 +1,8 @@
-# Citation Guard — adversarial test findings
+# CiteWarden — adversarial test findings
+
+> Renamed from "Citation Guard" to CiteWarden before public release (see
+> below) — all mentions of the old name in this history refer to the same
+> project.
 
 Two passes, as requested: first as a tester trying to break the extraction
 and plumbing, then as an experienced law professional asking where this
@@ -217,10 +221,10 @@ get confusing silent-failure behavior and conclude the tool is broken.
 - Mixed/garbled Unicode (emoji, right-to-left Arabic script, Japanese) next
   to a real citation does not corrupt extraction or trigger a false
   mismatch - tested directly, extracted and matched cleanly.
-- `plugin.json`'s `repository` field is still a placeholder
-  (`github.com/omarai/citation-guard`) - not a bug, but **flagged as a
-  release blocker**: this needs Umar's real GitHub handle before this goes
-  out publicly, or the link in the published plugin will point nowhere.
+- `plugin.json`'s `repository` field was a placeholder
+  (`github.com/omarai/citation-guard`) - **resolved**: now points to
+  `github.com/umar418/citewarden`, the real handle, alongside the rename to
+  CiteWarden below.
 
 ## Severity-ranked summary
 
@@ -244,13 +248,24 @@ get confusing silent-failure behavior and conclude the tool is broken.
 | No "U.S. only" scope statement | Confusing silent failure for non-U.S. users | **Fixed** (stated in README) |
 | `plugin.json` repository URL is still a placeholder | Broken link if published as-is | **Open - release blocker, needs Umar's real GitHub handle** |
 
+## Pass 5 — Naming and release prep
+
+Renamed from "Citation Guard" to **CiteWarden** before public release, and
+fixed the placeholder GitHub URL (now `github.com/umar418/citewarden`).
+The rename was a deliberate SEO/trademark decision, not cosmetic: a web
+search turned up an already-crowded field of near-identical names in this
+exact space - CiteGuard (two unrelated existing open-source projects),
+CaseLaw Guard, CiteSentry, and commercial products CiteProof, CiteSentinel,
+and CiteCheck AI. Shipping under "Citation Guard" or any of those names
+would have meant competing for search visibility against existing,
+unrelated projects instead of owning a distinct, searchable name. No
+collision was found for "CiteWarden" at the time of this search.
+
 ## Open items for a human to close out
 
 1. ~~Get a free CourtListener API token and run this against real cases~~
    — **done.** Live-confirmed in Pass 3 above.
-2. **Replace the placeholder GitHub URL in `plugin.json` and `README.md`**
-   with the real repository location before publishing - currently a
-   non-functional placeholder.
+2. ~~Replace the placeholder GitHub URL~~ — **done,** see Pass 5.
 3. **Decide if parallel-citation de-duplication is worth building** — low
    severity, but it's the kind of thing that erodes trust in the tool's
    output through sheer visual noise.

@@ -1,9 +1,9 @@
 ---
-name: citation-guard
-description: Verify every case-law citation in a legal brief, memo, or AI-drafted document against the real court record before filing. Use this whenever the user pastes legal text containing citations, asks to "check citations," "cite-check," "verify case cites," or is worried an AI assistant may have hallucinated a case.
+name: citewarden
+description: CiteWarden verifies every case-law citation in a legal brief, memo, or AI-drafted document against the real court record before filing, catching hallucinated or mismatched citations. Use this whenever the user pastes legal text containing citations, asks to "check citations," "cite-check," "verify case cites," run CiteWarden, or is worried an AI assistant may have hallucinated a case.
 ---
 
-# Citation Guard
+# CiteWarden
 
 AI-drafted legal text has a documented, costly failure mode: fabricated or
 mismatched case citations. Even paid commercial legal-AI tools still

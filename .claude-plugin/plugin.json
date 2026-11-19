@@ -1,9 +1,20 @@
 {
-  "name": "citation-guard",
-  "version": "0.1.0",
-  "description": "Verify case-law citations in a legal brief or AI-drafted memo against the real court record, catching hallucinated cites before you file.",
+  "name": "citewarden",
+  "version": "0.2.0",
+  "description": "CiteWarden checks case-law citations in a legal brief or AI-drafted memo against the real court record, catching hallucinated or mismatched cites before you file.",
   "author": { "name": "Omar AI", "url": "https://omarai.org" },
-  "repository": "https://github.com/omarai/citation-guard",
+  "repository": "https://github.com/umar418/citewarden",
+  "homepage": "https://github.com/umar418/citewarden",
   "license": "MIT",
-  "keywords": ["legal", "citations", "hallucination", "ai-safety", "law"]
+  "keywords": [
+    "citewarden",
+    "legal-tech",
+    "citation-checker",
+    "legal-citation-checker",
+    "ai-hallucination",
+    "hallucination-detection",
+    "case-law",
+    "legal-citations",
+    "claude-code-plugin"
+  ]
 }
