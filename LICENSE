@@ -19,8 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-This license covers this repository's own code only. The bundled dependency
-`eyecite` is separately licensed under the BSD license by Free Law Project
-(https://github.com/freelawproject/eyecite). Use of the CourtListener API is
-governed by Free Law Project's own terms (https://www.courtlistener.com/terms/).
