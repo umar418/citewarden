@@ -1,0 +1,9 @@
+{
+  "name": "citation-guard",
+  "version": "0.1.0",
+  "description": "Verify case-law citations in a legal brief or AI-drafted memo against the real court record, catching hallucinated cites before you file.",
+  "author": { "name": "Omar AI", "url": "https://omarai.org" },
+  "repository": "https://github.com/omarai/citation-guard",
+  "license": "MIT",
+  "keywords": ["legal", "citations", "hallucination", "ai-safety", "law"]
+}
