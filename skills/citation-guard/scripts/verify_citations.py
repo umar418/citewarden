@@ -66,6 +66,7 @@ instead of guessing.
    made every text match in this function silently fail. Fixed by using
    corrected_citation() instead.
 """
+import difflib
 import json
 import os
 import re
@@ -126,10 +127,65 @@ def categorize_citations(citations):
     return full_case, short_or_id, other
 
 
+# Common, unambiguous legal-name abbreviations. Kept deliberately small and
+# conservative - every entry here is safe to expand in both directions with
+# no realistic ambiguity. "U.S." is the single most important one: it is
+# probably the most frequent party name in all of American case law (every
+# federal criminal/civil case brought by the government), and a strict
+# substring check flags it as a mismatch against CourtListener's
+# "United States v. ..." every single time - a false "HIGH severity
+# hallucination" on completely ordinary, correct citations. Found live - see
+# FINDINGS.md, Pass 4.
+_ABBREV_EXPANSIONS = {
+    "u.s.": "united states", "u.s": "united states", "us": "united states",
+    "gov't": "government", "govt": "government",
+    "dep't": "department", "dept": "department",
+    "ass'n": "association", "assn": "association",
+    "corp.": "corporation", "corp": "corporation",
+    "inc.": "incorporated", "inc": "incorporated",
+    "co.": "company",
+    "bros.": "brothers", "bros": "brothers",
+    "mfg.": "manufacturing", "mfg": "manufacturing",
+    "&": "and",
+}
+_ET_AL = re.compile(r"\bet\s+al\.?\b")
+_PUNCT = re.compile(r"[.,'’]")
+_WS = re.compile(r"\s+")
+
+
+def _normalize_name(name: str) -> str:
+    name = name.lower()
+    name = _ET_AL.sub("", name)
+    for abbr, full in _ABBREV_EXPANSIONS.items():
+        name = re.sub(r"(?<!\w)" + re.escape(abbr) + r"(?!\w)", full, name)
+    name = _PUNCT.sub("", name)
+    return _WS.sub(" ", name).strip()
+
+
+def _names_plausibly_match(party: str, resolved_name: str) -> bool:
+    """Deliberately conservative: biased toward NOT flagging a mismatch,
+    because a false "this looks like a hallucination" accusation on a real,
+    correctly-cited case is worse for trust in this tool than occasionally
+    staying quiet on a genuine mismatch (which still shows up as a citation
+    the user can see and the disclaimers already tell them to verify names
+    manually)."""
+    p = _normalize_name(party)
+    r = _normalize_name(resolved_name)
+    if not p:
+        return True  # unknown name (e.g. smart-quote artifact) - don't accuse
+    if p in r:
+        return True
+    for side in re.split(r"\bv\b", r):
+        side = side.strip()
+        if side and difflib.SequenceMatcher(None, p, side).ratio() > 0.6:
+            return True
+    return False
+
+
 def attempt_name_cross_check(full_case_citations, api_result):
     """Best-effort comparison of eyecite's extracted party names against
-    whatever case name CourtListener's response resolves each citation to.
-    Schema NOT confirmed live - see module docstring. Fails soft."""
+    whatever case name(s) CourtListener's response resolves each citation to.
+    Response shape is live-confirmed - see FINDINGS.md, Pass 3 and 4."""
     if not isinstance(api_result, list):
         return {"performed": False, "note": "API result was not a list - unexpected shape, skipped."}
 
@@ -138,17 +194,15 @@ def attempt_name_cross_check(full_case_citations, api_result):
     for item in api_result:
         if not isinstance(item, dict):
             continue
-        # Try a few plausible shapes without asserting any of them as ground truth.
-        resolved_name = (
-            item.get("case_name")
-            or item.get("caseName")
-            or next(
-                (cl.get("case_name") for cl in (item.get("clusters") or []) if isinstance(cl, dict)),
-                None,
-            )
-        )
+        clusters = [cl for cl in (item.get("clusters") or []) if isinstance(cl, dict)]
+        # Collect every candidate case name CourtListener returned for this
+        # citation - an ambiguous citation can resolve to more than one real
+        # case. Only flag a mismatch if the cited party matches NONE of them.
+        resolved_names = [cl.get("case_name") for cl in clusters if cl.get("case_name")]
+        resolved_names += [item.get("case_name"), item.get("caseName")]  # legacy/alt shapes, defensive
+        resolved_names = [n for n in resolved_names if n]
         cite_text = item.get("citation") or item.get("normalized_citation") or ""
-        if not resolved_name or not cite_text:
+        if not resolved_names or not cite_text:
             continue
         match = next((fc for fc in full_case_citations if fc["text"] == cite_text), None)
         if not match:
@@ -157,11 +211,11 @@ def attempt_name_cross_check(full_case_citations, api_result):
         for party in (match["plaintiff"], match["defendant"]):
             if not party:  # unknown name (e.g. smart-quote artifact) - skip, don't accuse
                 continue
-            if party.lower() not in resolved_name.lower():
+            if not any(_names_plausibly_match(party, rn) for rn in resolved_names):
                 mismatches.append({
                     "citation": cite_text,
                     "cited_as": f'{match["plaintiff"]} v. {match["defendant"]}',
-                    "courtlistener_case_name": resolved_name,
+                    "courtlistener_case_name": resolved_names[0],
                     "severity": "HIGH - real citation number, party names do not match the real case",
                 })
                 break
@@ -213,6 +267,19 @@ def main() -> None:
     token = os.environ.get("COURTLISTENER_API_TOKEN")
     if not token:
         fail(f"No COURTLISTENER_API_TOKEN set. {TOKEN_HELP}")
+        return
+
+    # CourtListener's citation-lookup endpoint rejects any text over 64,000
+    # characters outright (confirmed live - see FINDINGS.md, Pass 4). A real
+    # brief or motion can easily run longer than that. Catch it here with a
+    # clear, actionable message instead of letting the user hit a raw
+    # "Ensure this field has no more than 64000 characters" API error.
+    if len(text) > 64000:
+        fail(
+            f"Document is {len(text)} characters - CourtListener's citation-lookup "
+            "API accepts at most 64,000 characters per request. Split the document "
+            "into sections of roughly that size or smaller and check each separately."
+        )
         return
 
     try:
@@ -273,4 +340,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Top-level safety net: an end user here is often a non-technical lawyer,
+    # not a developer. A raw Python traceback is unprofessional at best and,
+    # for a tool whose entire pitch is "trustworthy," actively undermines it.
+    # Anything truly unexpected becomes a clean JSON error instead of a dump.
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - intentional catch-all, see above
+        fail(f"Unexpected error: {type(exc).__name__}: {exc}")

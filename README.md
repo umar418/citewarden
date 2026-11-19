@@ -28,6 +28,11 @@ citations are confirmed real and which it couldn't verify.
 **This is not legal advice**, and a clean result doesn't replace your own
 professional review of the document.
 
+**Scope: U.S. case law only.** Both `eyecite` and CourtListener's database
+are built around U.S. federal and state court citations. It will not
+recognize or verify citations from other countries' courts (UK neutral
+citations, Canadian, Australian, etc.).
+
 ## Why this, and not just asking an AI chatbot
 
 Confirming whether a case citation is real requires checking it against an
@@ -69,6 +74,8 @@ This tool confirms a citation **exists**. It does not confirm:
 - that the case is still **good law** (not overruled, reversed, or vacated) - it is not a Shepard's/KeyCite replacement;
 - that the case actually **says** what it's being cited for - a real citation can still be attached to a fabricated quote or holding;
 - anything about state trial-court orders, administrative decisions, or unpublished/Westlaw-only citations not indexed in CourtListener's free database - those can come back "unmatched" for coverage reasons, not because they're fake.
+
+CourtListener's API also caps each request at 64,000 characters - a long brief or motion may need to be split into sections and checked separately.
 
 See [`skills/citation-guard/FINDINGS.md`](skills/citation-guard/FINDINGS.md) for the full adversarial test report these limitations came from, including the most important one found: a hallucination that reuses a **real** citation number with **invented party names** passes a naive "does this citation exist" check, which is why this tool separately cross-checks the cited party names against the real case name.
 

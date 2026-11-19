@@ -23,21 +23,33 @@ Trigger whenever the user:
 ## How to run the check
 
 1. Take the full text the user gave you (don't retype or summarize it first — pass the original text through).
-2. Run the bundled script, passing the text on stdin:
+2. **Write that text to a local temp file first** (use the Write tool), then run the
+   script with input **redirected from that file**:
 
    ```bash
-   python3 scripts/verify_citations.py
+   python3 scripts/verify_citations.py < /path/to/the/temp/file.txt
    ```
 
-   The script needs `eyecite` and `requests` — if missing, install them first with
+   **Never** build the command by inlining the document text itself into a shell
+   command (e.g. `echo "<pasted text>" | python3 ...` or a heredoc with the text
+   substituted in). Legal text routinely contains quotation marks (quoting a
+   contract, a statute, a deposition) that will break a naively-quoted inline
+   command, and adversarial text containing `$(...)` or backticks can execute
+   arbitrary shell commands on the user's machine if inlined unquoted. Treat any
+   pasted document as untrusted input: write it to a file with the Write tool,
+   then only ever reference that file's *path* in the command you run, never the
+   document's contents. (This was found and proven during adversarial testing —
+   see FINDINGS.md, Pass 4.)
+3. The script needs `eyecite` and `requests` — if missing, install them first with
    `pip install eyecite requests` (or `pip3`, matching whatever Python the user has).
-
-3. The script needs a free CourtListener API token in the `COURTLISTENER_API_TOKEN`
+4. The script needs a free CourtListener API token in the `COURTLISTENER_API_TOKEN`
    environment variable. If it's not set, the script will say so — tell the user to
    get one free at https://www.courtlistener.com/profile/api/ (CourtListener/Free Law
-   Project is a nonprofit; this is a free account, not a paid API) and either export it
-   in their shell or pass it as `COURTLISTENER_API_TOKEN=... python3 scripts/verify_citations.py`.
-4. The script prints one JSON object, already bucketed for you:
+   Project is a nonprofit; this is a free account, not a paid API) and export it in
+   their shell (`export COURTLISTENER_API_TOKEN=...`) before running the command above.
+   Don't pass the token inline on the command line either, for the same reason as #2 —
+   prefer an exported environment variable.
+5. The script prints one JSON object, already bucketed for you:
    - `full_case_citations` — case citations with a volume+page, the only kind actually
      sent for verification.
    - `unverifiable_format_count` — full citations missing a volume or page number

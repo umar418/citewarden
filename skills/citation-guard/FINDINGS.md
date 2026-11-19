@@ -133,6 +133,95 @@ This closes open item #1 from Pass 2. `attempt_name_cross_check()` and its
 docstring have been updated to state this is live-confirmed rather than
 best-effort.
 
+## Pass 4 — Hard multidimensional pass before public release
+
+Requested explicitly as a pre-release check, treating this as a reputation
+question, not just a code check. Widened scope beyond citation-matching
+correctness to security, crash safety, and real-world document shape.
+
+**1. Command injection / reliability break via how the script is invoked -
+the most severe finding of this pass.** `SKILL.md` told Claude to "run the
+bundled script, passing the text on stdin" without specifying the mechanism.
+Proved concretely (harmless `touch` payload, not run against anything real)
+that the natural-looking approach - inlining the pasted document into an
+`echo "<text>" | python3 ...` shell command - lets a crafted citation-like
+string execute arbitrary shell commands via unquoted `$(...)`. Separately,
+and just as importantly for a legal tool: **ordinary legal text containing
+a quotation mark** (quoting a contract, a statute, a deposition - extremely
+common) breaks a naively-quoted inline command even with no malicious
+intent at all, so this was also a plain reliability bug, not only a
+security one. **Fixed:** `SKILL.md` now mandates writing the pasted text to
+a file with the Write tool first and redirecting the script's input from
+that file's path (`< /path/to/file.txt`), never interpolating document
+content into a command string. Severity: **critical** - this is an
+actual-code-execution-on-the-user's-machine class of bug, from a tool whose
+entire premise is trustworthiness.
+
+**2. The most common real-world name-matching false positive imaginable.**
+Live-tested `"U.S. v. Nixon, 418 U.S. 683 (1974)"` - a real, correctly
+cited case. CourtListener resolves it to "United States v. Nixon." The
+strict substring check from Pass 3 flagged this as a **HIGH severity
+hallucination** - on one of the single most common citation patterns in
+all of American law (the U.S. government as a party). Shipping this would
+mean the tool cries wolf on completely routine citations from the first
+real brief anyone ran through it. **Fixed:** replaced strict substring
+matching with `_names_plausibly_match()` - a small, conservative
+abbreviation table (U.S./government/dept/assn/corp/inc/co/bros/mfg/&) plus
+a fuzzy fallback (`difflib.SequenceMatcher`, threshold 0.6) against each
+side of the resolved case name. Deliberately biased toward **not**
+flagging, since a false accusation on a real case does more reputational
+damage than quietly missing a borderline one (which the standing
+disclaimers already tell the user to verify manually regardless).
+Re-verified both directions: "U.S. v. Nixon" no longer flags; "Smith v.
+Winterbourne" (the real Pass-3 hallucination test, actually *Obergefell v.
+Hodges*) still correctly flags. Also unit-tested that genuinely different
+names ("Smith", "Winterbourne" against "Obergefell v. Hodges") are still
+caught - the fuzzy threshold was chosen to be forgiving of near-miss
+spelling only, not of a different case entirely.
+
+**3. Ambiguous citations only checked their first candidate match.** A
+citation that resolves to more than one real case (CourtListener can return
+multiple `clusters` for one citation) was only compared against
+`clusters[0]`. Fixed to check the cited name against *all* returned
+clusters and only flag a mismatch if none of them match.
+
+**4. No safety net for genuinely unexpected failures.** A non-technical
+lawyer is the target user; a raw Python traceback is exactly the kind of
+output that destroys trust in a "trustworthy citations" tool on sight.
+Added a top-level `try/except` around `main()` that converts anything
+unexpected into the same clean `{"error": ...}` JSON shape the script
+already uses elsewhere, never a stack trace. **Verified with a real
+failure, not a hypothetical one:** feeding the script 200 bytes of raw
+`/dev/urandom` (simulating, e.g., someone accidentally piping in a binary
+file) hit a `UnicodeEncodeError` deep inside output serialization - the
+safety net caught it and printed a clean one-line JSON error instead of a
+traceback.
+
+**5. CourtListener's API silently caps input at 64,000 characters.**
+Discovered by testing an intentionally long document (~480,000 characters,
+simulating a long brief with exhibits): the API rejected it with a raw
+validation error (`"Ensure this field has no more than 64000 characters"`).
+A real, lengthy federal appellate brief can realistically exceed this.
+**Fixed:** a pre-flight length check now gives a clear, actionable message
+("split the document into sections") instead of surfacing the raw API
+error text.
+
+**6. Scope wasn't stated plainly enough.** Neither `eyecite` nor
+CourtListener's database covers non-U.S. case law. Added an explicit "U.S.
+case law only" line near the top of the README so a non-U.S. user doesn't
+get confusing silent-failure behavior and conclude the tool is broken.
+
+**Confirmed NOT reputational risks, checked and ruled out this pass:**
+- The API token is never printed, logged, or written to any file in the
+  repo at any point - re-confirmed by reading every `fail()` call site.
+- Mixed/garbled Unicode (emoji, right-to-left Arabic script, Japanese) next
+  to a real citation does not corrupt extraction or trigger a false
+  mismatch - tested directly, extracted and matched cleanly.
+- `plugin.json`'s `repository` field is still a placeholder
+  (`github.com/omarai/citation-guard`) - not a bug, but **flagged as a
+  release blocker**: this needs Umar's real GitHub handle before this goes
+  out publicly, or the link in the published plugin will point nowhere.
+
 ## Severity-ranked summary
 
 | Finding | Type of false result | Status |
@@ -147,14 +236,25 @@ best-effort.
 | Statute/Id./supra cites implied as "checked" | Misleading scope | Fixed (separate buckets) |
 | Parallel citations double-counted | User confusion | Open, not fixed this pass |
 | >250 citations in one document | Hard failure (loud, not silent) | Acceptable as-is; no auto-chunking |
+| Inlined document text in a shell command → injection + breaks on quotes | Security (code execution) + reliability | **Fixed** (SKILL.md mandates file-redirect, never inline) |
+| "U.S. v. X" flagged as mismatch against "United States v. X" | False **positive**, on the most common case-name pattern in U.S. law | **Fixed** (abbreviation table + fuzzy match) |
+| Ambiguous citation only checked against first of several possible matches | Potential false positive | **Fixed** (checks all clusters) |
+| Unexpected exception → raw traceback shown to a non-technical user | Trust/professionalism | **Fixed** (top-level safety net, verified with real binary-input crash) |
+| Document over 64,000 characters → raw API validation error | Confusing failure on long real briefs | **Fixed** (clear pre-flight message) |
+| No "U.S. only" scope statement | Confusing silent failure for non-U.S. users | **Fixed** (stated in README) |
+| `plugin.json` repository URL is still a placeholder | Broken link if published as-is | **Open - release blocker, needs Umar's real GitHub handle** |
 
 ## Open items for a human to close out
 
 1. ~~Get a free CourtListener API token and run this against real cases~~
    — **done.** Live-confirmed in Pass 3 above.
-2. **Decide if parallel-citation de-duplication is worth building** — low
+2. **Replace the placeholder GitHub URL in `plugin.json` and `README.md`**
+   with the real repository location before publishing - currently a
+   non-functional placeholder.
+3. **Decide if parallel-citation de-duplication is worth building** — low
    severity, but it's the kind of thing that erodes trust in the tool's
    output through sheer visual noise.
-3. **Decide if >250-citation documents are common enough in practice to
+4. **Decide if >250-citation documents are common enough in practice to
    justify auto-chunking** — currently it fails loudly instead, which is
-   honest but not graceful.
+   honest but not graceful. Same question now applies to the 64,000
+   character cap.
