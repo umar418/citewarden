@@ -47,17 +47,24 @@ instead of guessing.
    this. We extract eyecite's own plaintiff/defendant metadata for each
    full citation and compare it, case-insensitively, against whatever case
    name CourtListener's response resolves that citation to.
-   HONESTY CAVEAT: the exact v4 citation-lookup response schema has not
-   been confirmed against a live call (no API token was available while
-   writing this - see FINDINGS.md). This function tries several plausible
-   field paths and reports which (if any) worked; if none did, it says so
-   explicitly rather than pretending the check ran. This MUST be verified
-   and hardened against a real response before relying on it.
+   LIVE-CONFIRMED (see FINDINGS.md): tested against the real v4 endpoint
+   with a real API token. Response shape is `[{"citation", "status",
+   "clusters": [{"case_name", ...}]}]`; an unmatched citation has
+   `status != 200` and `clusters: []`. Confirmed catching the exact attack
+   this exists for: "Smith v. Winterbourne, 576 U.S. 644 (2015)" - a real
+   citation (actually *Obergefell v. Hodges*) reused with invented party
+   names - is correctly flagged HIGH severity, while the same citation
+   cited correctly produces no false alarm.
    Also: eyecite can return an empty string for plaintiff/defendant on
    otherwise-correct citations (observed when a Unicode smart quote sits
    right before the case name). An empty/missing name is treated as
    "unknown - skip the check," never as an automatic mismatch, specifically
    to avoid a false "mismatch" flag on a perfectly real citation.
+   A SEPARATE bug this live testing caught: the "text" field used to be
+   eyecite's verbose debug repr (str(c)), not the clean citation string
+   ("576 U.S. 644") CourtListener's API actually returns - which would have
+   made every text match in this function silently fail. Fixed by using
+   corrected_citation() instead.
 """
 import json
 import os
@@ -88,8 +95,15 @@ def categorize_citations(citations):
     full_case, short_or_id, other = [], [], []
     for c in citations:
         kind = type(c).__name__
-        text = str(c)
         if kind == "FullCaseCitation":
+            # IMPORTANT: str(c) is eyecite's verbose debug repr
+            # (e.g. "FullCaseCitation('576 U.S. 644', groups={...}, metadata=...)"),
+            # NOT the clean citation string. CourtListener's API returns the clean
+            # form ("576 U.S. 644") in its "citation" field - using str(c) here would
+            # make every text-based match against the API response silently fail.
+            # corrected_citation() gives the clean, comparable string. Found and
+            # fixed during live testing - see FINDINGS.md.
+            text = c.corrected_citation()
             meta = c.metadata
             volume = c.groups.get("volume")
             page = c.groups.get("page")
@@ -106,9 +120,9 @@ def categorize_citations(citations):
                 "verifiable_format": bool(volume and page),
             })
         elif kind in ("ShortCaseCitation", "IdCitation", "SupraCitation"):
-            short_or_id.append({"text": text, "type": kind})
+            short_or_id.append({"text": str(c), "type": kind})
         else:
-            other.append({"text": text, "type": kind})
+            other.append({"text": str(c), "type": kind})
     return full_case, short_or_id, other
 
 
@@ -156,10 +170,11 @@ def attempt_name_cross_check(full_case_citations, api_result):
         return {
             "performed": False,
             "note": (
-                "Could not confidently match any API result item back to an extracted "
-                "citation using known field names (case_name/caseName/clusters). The "
-                "v4 response schema needs confirming against a real call; until then, "
-                "manually confirm party names against the citation yourself."
+                "Could not match any API result item back to an extracted citation "
+                "using the known response shape (citation/clusters[].case_name, "
+                "live-confirmed - see FINDINGS.md). Either there were no full case "
+                "citations to check, or CourtListener changed its response shape. "
+                "Manually confirm party names against the citation yourself."
             ),
         }
     return {"performed": True, "checked": checked, "possible_mismatches": mismatches}

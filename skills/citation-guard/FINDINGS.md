@@ -2,13 +2,9 @@
 
 Two passes, as requested: first as a tester trying to break the extraction
 and plumbing, then as an experienced law professional asking where this
-could mislead someone who actually relies on it in practice.
-
-**Scope limitation, stated up front:** no CourtListener API token was
-available during this pass (creating that account was left for Umar, per
-the earlier plan). Everything involving live verification results is
-therefore reasoned through and defensively coded, not confirmed against a
-real response. That gap is itself the top open item below.
+could mislead someone who actually relies on it in practice. A third pass
+below is a live-API follow-up once a real CourtListener token became
+available.
 
 ## Pass 1 — Tester: break the extraction
 
@@ -95,11 +91,54 @@ year. Not fixed in code this pass — flagged as an open item below, since it
 risks only user confusion (e.g., "1 of 2 matched" read as a partial failure
 of one real citation), not a false verified/unverified verdict.
 
+## Pass 3 — Live API follow-up (real CourtListener token)
+
+Once a real free API token was available, ran the exact scenarios above
+against the live v4 endpoint instead of simulated response shapes.
+
+**Confirmed response schema:** `[{"citation": "576 U.S. 644", "status": 200,
+"error_message": "", "clusters": [{"case_name": "Obergefell v. Hodges",
+...}]}]` for a match; `"status": 404, "error_message": "Citation not
+found: '...'", "clusters": []` for no match. The name-matching logic
+written against guessed field names (`case_name` inside `clusters[]`)
+turned out to be correct on the first try.
+
+**Found a second real bug in the process, independent of the guessed-schema
+caveat:** the `"text"` field used to populate each citation's record used
+`str(c)`, which is eyecite's verbose debug repr -
+`"FullCaseCitation('576 U.S. 644', groups={...}, metadata=...)"` - not the
+clean citation string. CourtListener's API returns the clean form
+("576 U.S. 644") in its `"citation"` field. Matching one against the other
+would have silently returned zero matches every single time, regardless of
+whether the schema-guessing was right - the whole name cross-check would
+have quietly done nothing on every real document. **Fixed:** use eyecite's
+`corrected_citation()` method, which returns the clean, comparable string.
+This is the kind of bug that's especially dangerous for a hallucination
+checker specifically because it fails *silent and green* - `performed:
+true, checked: 0, possible_mismatches: []` looks identical to "ran cleanly,
+found nothing wrong," not to "broken."
+
+**Live results, both directions:**
+- `"Smith v. Winterbourne, 576 U.S. 644 (2015) established a right to
+  privacy in orbit."` → citation matched (it's real), name cross-check
+  correctly flagged it HIGH severity: cited as "Smith v. Winterbourne,"
+  CourtListener resolves it to "Obergefell v. Hodges."
+- The same citation cited correctly (`"Obergefell v. Hodges, 576 U.S. 644
+  (2015)..."`) → matched, zero mismatches. No false alarm on the real thing.
+- A fully fabricated citation (`"Flibbertigibbet v. Nonexistent Corp., 999
+  F.4th 123 (9th Cir. 2024)"`) → `status: 404`, `clusters: []`, exactly the
+  "doesn't exist" signal expected.
+
+This closes open item #1 from Pass 2. `attempt_name_cross_check()` and its
+docstring have been updated to state this is live-confirmed rather than
+best-effort.
+
 ## Severity-ranked summary
 
 | Finding | Type of false result | Status |
 |---|---|---|
-| Real citation # + fake party names passes a naive check | False **positive** (verified a hallucination) | Fixed (name cross-check), unverified against live API |
+| Real citation # + fake party names passes a naive check | False **positive** (verified a hallucination) | Fixed (name cross-check), live-confirmed against the real API |
+| `text` field used debug repr, not clean citation string | Would have made the name cross-check silently match nothing, ever (fails green) | Fixed (`corrected_citation()`), live-confirmed |
 | PDF line-wrap makes a real citation invisible | False **negative** (silent, not even flagged) | Fixed (newline normalization) |
 | "Matched" read as "still good law" | Misleading omission | Fixed (standing disclaimer) |
 | Real cite, fabricated holding | Undetectable by design | Documented, not fixable by this approach |
@@ -111,11 +150,8 @@ of one real citation), not a false verified/unverified verdict.
 
 ## Open items for a human to close out
 
-1. **Get a free CourtListener API token and run this against real cases**
-   — including a real hallucinated-name test like the one above — to
-   confirm `attempt_name_cross_check()`'s field-matching actually works
-   against the live v4 response schema, and tell me the real field names so
-   the guesswork in that function can be replaced with certainty.
+1. ~~Get a free CourtListener API token and run this against real cases~~
+   — **done.** Live-confirmed in Pass 3 above.
 2. **Decide if parallel-citation de-duplication is worth building** — low
    severity, but it's the kind of thing that erodes trust in the tool's
    output through sheer visual noise.

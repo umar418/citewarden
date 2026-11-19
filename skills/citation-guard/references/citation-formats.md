@@ -58,9 +58,11 @@ loudly with a clear message rather than guessing, which is intentional
   and a wrong antecedent guess during testing) - this tool deliberately does
   not attempt automatic resolution, to avoid adding a new source of false
   results on top of removing one.
-- **The `name_cross_check` result's reliability depends on a live-confirmed
-  API schema.** It was built and unit-tested against several plausible
-  response shapes, but has not yet been run against a real CourtListener
-  response (no API token was available during development). Treat
-  `performed: false` as "not yet verified working," not as "no mismatch
-  found."
+- **The `name_cross_check` is live-confirmed, not just unit-tested.** Run
+  against the real v4 endpoint with a real token: it correctly flagged a
+  real citation number (576 U.S. 644, actually *Obergefell v. Hodges*)
+  reused under invented party names ("Smith v. Winterbourne") as a HIGH
+  severity mismatch, and produced no false alarm on the same citation cited
+  correctly. If `performed: false` comes back, it means there were no full
+  case citations to check, or CourtListener changed its response shape -
+  not that the check silently failed open.
